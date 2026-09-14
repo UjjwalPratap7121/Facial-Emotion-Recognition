@@ -4,8 +4,8 @@ import numpy as np
 import streamlit as st
 import tensorflow as tf
 from PIL import Image
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
-import av
+# from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
+# import av
 
 # ---------------------------------------------------------------
 # CONFIG — change this if your model is somewhere else
@@ -78,30 +78,35 @@ with tab1:
                 st.write(f"**Face {i}:** {emotion} ({confidence:.1f}% confidence)")
 
 # ---------------------------------------------------------------
-# ---------------------------------------------------------------
-# TAB 2: LIVE WEBCAM (via browser using WebRTC)
+
+# TAB 2: CAMERA SNAPSHOT
 # ---------------------------------------------------------------
 with tab2:
-    st.subheader("Live webcam emotion detection")
-    st.caption("Click Start below, allow camera access in your browser.")
+    st.subheader("Take a photo")
+    st.caption("Click below to open your camera and take a snapshot.")
 
-    class EmotionProcessor(VideoProcessorBase):
-        def recv(self, frame):
-            img = frame.to_ndarray(format="bgr24")
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
+    camera_photo = st.camera_input("Take a picture")
 
+    if camera_photo is not None:
+        image = Image.open(camera_photo).convert("RGB")
+        img_array = np.array(image)
+        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
+
+        if len(faces) == 0:
+            st.warning("No face detected. Try again with better lighting/angle.")
+        else:
+            annotated = img_array.copy()
+            results = []
             for (x, y, w, h) in faces:
                 emotion, confidence = predict_face(gray[y:y + h, x:x + w])
-                cv2.rectangle(img, (x, y), (x + w, y + h), (0, 200, 0), 2)
-                cv2.putText(img, f"{emotion} ({confidence:.1f}%)",
+                results.append((emotion, confidence))
+                cv2.rectangle(annotated, (x, y), (x + w, y + h), (0, 200, 0), 2)
+                cv2.putText(annotated, f"{emotion} ({confidence:.1f}%)",
                             (x, max(y - 10, 0)), cv2.FONT_HERSHEY_SIMPLEX,
                             0.7, (0, 200, 0), 2)
 
-            return av.VideoFrame.from_ndarray(img, format="bgr24")
-
-    webrtc_streamer(
-        key="emotion-detection",
-        video_processor_factory=EmotionProcessor,
-        media_stream_constraints={"video": True, "audio": False},
-    )
+            st.image(annotated, caption="Prediction", use_container_width=True)
+            for i, (emotion, confidence) in enumerate(results, 1):
+                st.write(f"**Face {i}:** {emotion} ({confidence:.1f}% confidence)")
