@@ -4,6 +4,8 @@ import numpy as np
 import streamlit as st
 import tensorflow as tf
 from PIL import Image
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
+import av
 
 # ---------------------------------------------------------------
 # CONFIG — change this if your model is somewhere else
@@ -78,53 +80,30 @@ with tab1:
 # ---------------------------------------------------------------
 # TAB 2: LIVE WEBCAM
 # ---------------------------------------------------------------
+# ---------------------------------------------------------------
+# TAB 2: LIVE WEBCAM (via browser using WebRTC)
+# ---------------------------------------------------------------
 with tab2:
     st.subheader("Live webcam emotion detection")
-    st.caption("Click Start, allow camera access, click Stop when done.")
+    st.caption("Click Start below, allow camera access in your browser.")
 
-    col1, col2 = st.columns(2)
-    start = col1.button("▶ Start Webcam")
-    stop = col2.button("■ Stop Webcam")
+    class EmotionProcessor(VideoProcessorBase):
+        def recv(self, frame):
+            img = frame.to_ndarray(format="bgr24")
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
 
-    frame_placeholder = st.empty()
+            for (x, y, w, h) in faces:
+                emotion, confidence = predict_face(gray[y:y + h, x:x + w])
+                cv2.rectangle(img, (x, y), (x + w, y + h), (0, 200, 0), 2)
+                cv2.putText(img, f"{emotion} ({confidence:.1f}%)",
+                            (x, max(y - 10, 0)), cv2.FONT_HERSHEY_SIMPLEX,
+                            0.7, (0, 200, 0), 2)
 
-    if "webcam_running" not in st.session_state:
-        st.session_state.webcam_running = False
+            return av.VideoFrame.from_ndarray(img, format="bgr24")
 
-    if start:
-        st.session_state.webcam_running = True
-    if stop:
-        st.session_state.webcam_running = False
-
-    if st.session_state.webcam_running:
-        cap = cv2.VideoCapture(0)
-        if not cap.isOpened():
-            st.error("Could not open webcam. Check camera permissions / index.")
-            st.session_state.webcam_running = False
-        else:
-            while st.session_state.webcam_running:
-                ret, frame = cap.read()
-                if not ret:
-                    st.error("Failed to read from webcam.")
-                    break
-
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
-
-                for (x, y, w, h) in faces:
-                    emotion, confidence = predict_face(gray[y:y + h, x:x + w])
-                    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 200, 0), 2)
-                    cv2.putText(frame, f"{emotion} ({confidence:.1f}%)",
-                                (x, max(y - 10, 0)), cv2.FONT_HERSHEY_SIMPLEX,
-                                0.7, (0, 200, 0), 2)
-
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frame_placeholder.image(frame_rgb, channels="RGB", use_container_width=True)
-
-                # Re-check the stop button on every loop iteration
-                if not st.session_state.webcam_running:
-                    break
-
-            cap.release()
-    else:
-        frame_placeholder.info("Webcam is stopped. Click ▶ Start Webcam to begin.")
+    webrtc_streamer(
+        key="emotion-detection",
+        video_processor_factory=EmotionProcessor,
+        media_stream_constraints={"video": True, "audio": False},
+    )
