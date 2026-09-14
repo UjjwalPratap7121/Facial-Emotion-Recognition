@@ -3,3 +3,5 @@ tensorflow
 opencv-contrib-python-headless
 numpy
 Pillow
+streamlit-webrtc
+av
