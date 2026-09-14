@@ -23,7 +23,7 @@ def load_model():
 
 @st.cache_resource
 def load_face_detector():
-    return cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    return cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
 
 
 model = load_model()
